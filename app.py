@@ -1,7 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
+import base64
+import os
 
-# --- 1. إعدادات الصفحة والهوية ---
+# --- 1. إعدادات الصفحة (Page Config) ---
 st.set_page_config(
     page_title="GoEKT Paper Decoder",
     page_icon="🧬",
@@ -9,145 +11,176 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. سحب مفتاح API من المخزن السري (Secrets) ---
-# هذا يجعل الأداة تعمل فوراً للعميل دون إدخال مفاتيح
-try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=api_key)
-except FileNotFoundError:
-    st.error("⚠️ لم يتم العثور على مفتاح API. يرجى إضافته في إعدادات Streamlit Secrets.")
-    st.stop()
+# --- 2. محرك الخطوط الذكي (Font Engine) ---
+def load_font(font_path):
+    """دالة لقراءة ملف الخط وتحويله لـ Base64 ليعمل على الويب"""
+    try:
+        with open(font_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except FileNotFoundError:
+        return None
 
-# --- 3. تصميم GoEKT (CSS Injection) ---
-st.markdown("""
-    <style>
-    /* استيراد خط تجريبي يشبه Changa/Cairo */
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+# مسارات الخطوط (تأكد من رفعها في مجلد fonts على GitHub)
+font_paths = {
+    "KOLab-Bold": "fonts/KOLab-Bold.woff2",
+    "KOSans-Bold": "fonts/KOSans-Bold.woff2",
+    "KOSans-Regular": "fonts/KOSans-Regular.woff2",
+    "KOSans-Light": "fonts/KOSans-Light.woff2"
+}
 
-    /* الألوان الأساسية */
-    :root {
-        --primary: #0A192F;
-        --secondary: #172a45;
-        --accent: #64FFDA;
-        --text: #CCD6F6;
-        --cta: #C026D3;
-    }
-
-    /* تطبيق الخلفية والخطوط */
-    .stApp {
-        background-color: var(--primary);
-        font-family: 'Cairo', sans-serif;
-    }
-
-    /* العناوين */
-    h1, h2, h3, h4 {
-        color: var(--accent) !important;
-        font-family: 'Cairo', sans-serif;
+# توليد CSS للخطوط
+font_css = ""
+# محاولة تحميل KO Lab
+if font_b64 := load_font(font_paths["KOLab-Bold"]):
+    font_css += f"""
+    @font-face {{
+        font-family: 'KO Lab';
+        src: url(data:font/woff2;base64,{font_b64}) format('woff2');
         font-weight: 700;
-    }
+    }}
+    """
+# محاولة تحميل KO Sans (Regular, Bold, Light)
+if font_b64 := load_font(font_paths["KOSans-Regular"]):
+    font_css += f"""
+    @font-face {{
+        font-family: 'KO Sans';
+        src: url(data:font/woff2;base64,{font_b64}) format('woff2');
+        font-weight: 400;
+    }}
+    """
+if font_b64 := load_font(font_paths["KOSans-Bold"]):
+    font_css += f"""
+    @font-face {{
+        font-family: 'KO Sans';
+        src: url(data:font/woff2;base64,{font_b64}) format('woff2');
+        font-weight: 700;
+    }}
+    """
+if font_b64 := load_font(font_paths["KOSans-Light"]):
+    font_css += f"""
+    @font-face {{
+        font-family: 'KO Sans';
+        src: url(data:font/woff2;base64,{font_b64}) format('woff2');
+        font-weight: 300;
+    }}
+    """
 
-    /* النصوص العادية */
-    p, label, .stMarkdown {
-        color: var(--text) !important;
-    }
+# fallback إذا لم يتم رفع الخطوط بعد
+fallback_fonts = "sans-serif" if not font_css else "'KO Sans', sans-serif"
+heading_fonts = "sans-serif" if not font_css else "'KO Lab', sans-serif"
 
-    /* حقول الإدخال */
-    .stTextArea textarea {
-        background-color: var(--secondary) !important;
-        color: white !important;
-        border: 1px solid var(--accent) !important;
-        border-radius: 8px;
-    }
+# --- 3. نظام التصميم (Design System) ---
+st.markdown(f"""
+    <style>
+    {font_css}
 
-    /* الأزرار (CTA) */
-    .stButton button {
-        background: linear-gradient(90deg, var(--accent), var(--cta)) !important;
-        color: var(--primary) !important;
-        font-weight: bold !important;
-        border: none !important;
-        border-radius: 6px !important;
-        padding: 0.5rem 2rem !important;
-        transition: all 0.3s ease;
-    }
-    .stButton button:hover {
-        opacity: 0.9;
-        transform: scale(1.02);
-    }
+    :root {{
+        /* ألوان GoEKT الصارمة */
+        --goekt-primary: #E935C1;
+        --goekt-secondary: #2AB7A9;
+        --goekt-dark: #0B2B40;
+        --goekt-text: #FFFFFF;
+        
+        --goekt-gradient: linear-gradient(135deg, #E935C1 0%, #2AB7A9 100%);
+    }}
+
+    .stApp {{
+        background-color: var(--goekt-dark);
+        font-family: {fallback_fonts};
+    }}
+
+    /* العناوين بـ KO Lab */
+    h1, h2, h3 {{
+        font-family: {heading_fonts} !important;
+        background: var(--goekt-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700 !important;
+        text-align: right;
+    }}
     
-    /* إخفاء القوائم الافتراضية لستريم ليت لتبدو كأنها تطبيق خاص */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* النصوص بـ KO Sans */
+    p, li, .stMarkdown, label, .stTextArea textarea {{
+        font-family: {fallback_fonts} !important;
+        color: var(--goekt-text) !important;
+        text-align: right;
+        direction: rtl;
+    }}
+
+    /* تحسينات الواجهة */
+    .stButton button {{
+        background: var(--goekt-gradient) !important;
+        color: white !important;
+        font-family: {heading_fonts} !important;
+        border: none;
+        padding: 0.8rem 2rem;
+        border-radius: 8px;
+        transition: transform 0.2s;
+        width: 100%;
+    }}
+    .stButton button:hover {{
+        transform: scale(1.02);
+    }}
+    
+    .stTextArea textarea {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid var(--goekt-secondary) !important;
+    }}
+
+    #MainMenu, footer, header {{visibility: hidden;}}
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. العقل المدبر (The Brain Logic) ---
+# --- 4. المنطق (API & Logic) ---
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+except:
+    st.warning("⚠️ يرجى إضافة مفتاح API في Secrets")
+    st.stop()
+
 def goekt_translate(text):
-    # إعدادات الموديل
-    model = genai.GenerativeModel('gemini-1.5-flash') # نستخدم Flash لسرعة ورخص التكلفة
-    
-    # الـ System Prompt الصارم
-    system_instruction = """
-    You are the 'GoEKT Scientific Decoder'. Translate the following English academic text to Arabic.
-    
-    STRICT RULES:
-    1. Keep scientific terms in English brackets: e.g., الشبكات العصبية (Neural Networks).
-    2. Tone: Academic, professional, objective.
-    3. Format: Use Markdown with bold headings.
-    4. Output Structure:
-       - **العنوان بالعربية**
-       - **المصطلحات المفتاحية:** (List key terms translated)
-       - **الترجمة:** (The full translation)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    sys_prompt = """
+    أنت 'GoEKT Paper Decoder'. مهمتك: ترجمة الأوراق العلمية للعربية بدقة.
+    القواعد:
+    1. اكتب المصطلح الإنجليزي بين قوسين بجوار العربي: الشبكات (Networks).
+    2. حافظ على النغمة الأكاديمية الرصينة.
+    3. استخدم Markdown للتنسيق.
     """
-    
     try:
-        response = model.generate_content(f"{system_instruction}\n\nTEXT TO TRANSLATE:\n{text}")
-        return response.text
+        return model.generate_content(f"{sys_prompt}\n\nالنص:\n{text}").text
     except Exception as e:
-        return f"حدث خطأ في الاتصال: {str(e)}"
+        return f"خطأ: {e}"
 
-# --- 5. واجهة المستخدم (UI Layout) ---
-
-# الهيدر والشعار
-col_logo, col_title = st.columns([1, 6])
-with col_title:
-    st.markdown("# GoEKT Paper Decoder")
-    st.markdown("**Empower. Knowledge. Transform.** | المترجم الأكاديمي الذكي")
-
-st.markdown("---")
-
-# منطقة العمل
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.markdown("### 📄 النص الأصلي (English)")
-    source_text = st.text_area("ألصق النص أو فقرة من الورقة البحثية هنا...", height=400, label_visibility="collapsed")
-    
-    # زر الترجمة
-    translate_click = st.button("ترجمة علمية فورية ⚡")
-
+# --- 5. الواجهة (UI) ---
+col1, col2 = st.columns([1, 4])
 with col2:
-    st.markdown("### 🧬 الترجمة (Arabic)")
-    
-    # حاوية النتائج
-    result_container = st.container()
-    
-    if translate_click and source_text:
-        with result_container:
-            with st.spinner('جاري تحليل المصطلحات وتفكيك النص...'):
-                translation = goekt_translate(source_text)
-                st.markdown(translation)
-                st.success("✅ تمت الترجمة بدقة GoEKT")
-    elif not source_text and translate_click:
-        st.warning("يرجى إدخال نص أولاً!")
-    else:
-        with result_container:
-            st.info("النتائج ستظهر هنا...")
+    st.markdown("# 🧬 GoEKT Paper Decoder")
+    st.markdown(f"**Empower. Knowledge. Transform.** | الإصدار v1.0 Pro")
 
-# الفوتر
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #64FFDA; font-size: 0.8rem;'>
-    GoEKT Systems v1.0 © 2026 | Built for the Future
-</div>
-""", unsafe_allow_html=True)
+
+col_in, col_out = st.columns([1, 1])
+with col_in:
+    st.markdown("### 📥 النص الإنجليزي")
+    src = st.text_area("Original Text", height=400, label_visibility="collapsed")
+    btn = st.button("ترجمة علمية فورية ⚡")
+
+with col_out:
+    st.markdown("### 📤 الترجمة العربية")
+    if btn and src:
+        with st.spinner("جاري المعالجة..."):
+            res = goekt_translate(src)
+            st.markdown(f"""
+            <div style="background:rgba(255,255,255,0.05); padding:20px; border-radius:10px; border-right:3px solid #2AB7A9;">
+            {res}
+            </div>
+            """, unsafe_allow_html=True)
+            st.success("تمت الترجمة بنجاح")
+    elif btn:
+        st.warning("أدخل النص أولاً")
+
+st.markdown("---")
+st.markdown("<div style='text-align:center; color:#2AB7A9; direction:ltr'>GoEKT Systems © 2026</div>", unsafe_allow_html=True)
